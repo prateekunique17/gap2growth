@@ -1,20 +1,42 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
-import { ArrowRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { ArrowRight, AlertCircle } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
+import {
+  loginWithGoogle,
+  loginWithGitHub,
+  signInWithPassword,
+  signUpWithPassword,
+} from '../../lib/auth';
+import { isSupabaseConfigured } from '../../lib/supabase';
 
 export default function AuthPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { user } = useAuth();
 
   const initialMode = searchParams.get('mode') === 'signup' ? 'signup' : 'signin';
   const [mode, setMode] = useState(initialMode);
 
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
+
+  // Note: We intentionally do NOT auto-redirect to /dashboard on user change here,
+  // because when a user signs up, Supabase sets `user`, and we want them to stay on /onboarding.
+
+
   // Listen for navbar tab-switch events
   const handleNavbarSwitch = useCallback((e) => {
     setMode(e.detail);
+    setErrorMsg('');
+    setInfoMsg('');
   }, []);
 
   useEffect(() => {
@@ -22,27 +44,79 @@ export default function AuthPage() {
     return () => window.removeEventListener('auth-mode-change', handleNavbarSwitch);
   }, [handleNavbarSwitch]);
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-
   const switchMode = (newMode) => {
     setMode(newMode);
     setSearchParams({ mode: newMode });
+    setErrorMsg('');
+    setInfoMsg('');
   };
 
-  const handleSubmit = (e) => {
+  // Email + Password Submission
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (mode === 'signup') {
-      navigate('/onboarding');
-    } else {
-      navigate('/dashboard');
+    setErrorMsg('');
+    setInfoMsg('');
+
+    if (!isSupabaseConfigured) {
+      // Graceful fallback for local development before credentials are added
+      if (mode === 'signup') {
+        navigate('/onboarding');
+      } else {
+        navigate('/dashboard');
+      }
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (mode === 'signup') {
+        await signUpWithPassword(email, password, { full_name: fullName });
+        navigate('/onboarding');
+        return;
+      } else {
+        await signInWithPassword(email, password);
+        navigate('/dashboard');
+        return;
+      }
+    } catch (err) {
+      setErrorMsg(err.message || 'Authentication failed. Please verify your credentials.');
+      setLoading(false);
     }
   };
 
-  const handleGoogleAuth = () => {
-    alert(`Connecting to Supabase Google OAuth (${mode === 'signup' ? 'Sign Up' : 'Sign In'})...`);
+  // Google OAuth
+  const handleGoogleAuth = async () => {
+    setErrorMsg('');
+    if (!isSupabaseConfigured) {
+      alert('Add your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to frontend/.env.local to enable real Google OAuth.');
+      return;
+    }
+    try {
+      setLoading(true);
+      const redirectPath = mode === 'signup' ? '/onboarding' : '/dashboard';
+      await loginWithGoogle(`${window.location.origin}${redirectPath}`);
+    } catch (err) {
+      setErrorMsg(err.message || 'Google sign-in failed.');
+      setLoading(false);
+    }
+  };
+
+  // GitHub OAuth
+  const handleGithubAuth = async () => {
+    setErrorMsg('');
+    if (!isSupabaseConfigured) {
+      alert('Add your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to frontend/.env.local to enable real GitHub OAuth.');
+      return;
+    }
+    try {
+      setLoading(true);
+      const redirectPath = mode === 'signup' ? '/onboarding' : '/dashboard';
+      await loginWithGitHub(`${window.location.origin}${redirectPath}`);
+    } catch (err) {
+      setErrorMsg(err.message || 'GitHub sign-in failed.');
+      setLoading(false);
+    }
   };
 
   const sideImage = theme === 'dark' ? '/auth-side-dark.jpg' : '/auth-side-light.jpg';
@@ -53,7 +127,7 @@ export default function AuthPage() {
       <Navbar />
 
       {/* Split Layout below navbar */}
-      <div className="auth-split-wrapper mt-5">
+      <div className="auth-split-wrapper">
 
         {/* LEFT — Illustration Panel */}
         <div className="auth-illustration-panel">
@@ -75,6 +149,19 @@ export default function AuthPage() {
               </p>
             </div>
 
+            {/* Status alerts */}
+            {errorMsg && (
+              <div className="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-3" role="alert">
+                <AlertCircle size={16} className="flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+            {infoMsg && (
+              <div className="alert alert-info py-2 px-3 small mb-3" role="alert">
+                {infoMsg}
+              </div>
+            )}
+
             {/* Tab Switcher */}
             <div className="auth-tab-switcher mb-4">
               <button
@@ -93,17 +180,34 @@ export default function AuthPage() {
               </button>
             </div>
 
-            {/* Google OAuth */}
-            <button
-              type="button"
-              onClick={handleGoogleAuth}
-              className="btn-outline-theme w-100 py-2 d-flex align-items-center justify-content-center gap-2 mb-3"
-            >
-              <img src="https://www.svgrepo.com/show/475656/google-color.svg" width="18" height="18" alt="Google" />
-              <span className="small fw-semibold">
-                {mode === 'signin' ? 'Continue with Google' : 'Sign up with Google'}
-              </span>
-            </button>
+            {/* OAuth Buttons (Google & GitHub) */}
+            <div className="d-flex flex-column gap-2 mb-3">
+              <button
+                type="button"
+                onClick={handleGoogleAuth}
+                disabled={loading}
+                className="btn-outline-theme w-100 py-2 d-flex align-items-center justify-content-center gap-2"
+              >
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" width="18" height="18" alt="Google" />
+                <span className="small fw-semibold">
+                  {mode === 'signin' ? 'Continue with Google' : 'Sign up with Google'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGithubAuth}
+                disabled={loading}
+                className="btn-outline-theme w-100 py-2 d-flex align-items-center justify-content-center gap-2"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                </svg>
+                <span className="small fw-semibold">
+                  {mode === 'signin' ? 'Continue with GitHub' : 'Sign up with GitHub'}
+                </span>
+              </button>
+            </div>
 
             {/* Divider */}
             <div className="position-relative text-center my-3">
@@ -128,6 +232,7 @@ export default function AuthPage() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     required
+                    disabled={loading}
                   />
                 </div>
               )}
@@ -141,6 +246,7 @@ export default function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
 
@@ -160,11 +266,22 @@ export default function AuthPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
 
-              <button type="submit" className="btn-primary-theme w-100 py-3 mb-2">
-                <span>{mode === 'signin' ? 'Sign In' : 'Create Account'}</span>
+              <button
+                type="submit"
+                className="btn-primary-theme w-100 py-3 mb-2"
+                disabled={loading}
+              >
+                <span>
+                  {loading
+                    ? 'Processing...'
+                    : mode === 'signin'
+                    ? 'Sign In'
+                    : 'Create Account'}
+                </span>
                 <ArrowRight size={17} />
               </button>
 

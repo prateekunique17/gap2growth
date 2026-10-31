@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.tmp
+*.temp
+features/career-roadmap/data/*.json
+features/career-roadmap/data/*.tmp
+features/career-roadmap/data/*.cache

@@ -6,13 +6,13 @@ import Footer from '../../components/common/Footer';
 
 export default function LandingPage() {
   return (
-    <div className="min-vh-100 d-flex flex-column">
+    <div className="min-vh-100 d-flex flex-column page-content-offset">
       <Navbar />
 
       {/* ============================================================
           SECTION 1 — HERO
       ============================================================ */}
-      <section className="hero-artwork-section pt-5 pb-5 mt-5">
+      <section className="hero-artwork-section pt-4 pb-5">
         <div className="hero-artwork-overlay"></div>
 
         <div className="container pt-5 pb-5 hero-artwork-content">

@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import './styles/dashboard.css';
 
 /* =========================================================
    LIGHT THEME (DEFAULT)
@@ -30,6 +31,8 @@
   --hero-bg-image: url('/hero-bg-light.jpg');
   --hero-overlay: linear-gradient(180deg, rgba(234, 231, 223, 0.55) 0%, rgba(234, 231, 223, 0.25) 45%, rgba(234, 231, 223, 0.95) 100%);
   --onboarding-bg-image: url('/onboarding-bg-light.jpg');
+  --dashboard-bg-image: url('/dashboard-bg-light.png');
+  --navbar-height: 68px;
 }
 
 /* =========================================================
@@ -62,6 +65,8 @@
   --hero-bg-image: url('/hero-bg-dark.jpg');
   --hero-overlay: linear-gradient(180deg, rgba(23, 23, 23, 0.65) 0%, rgba(23, 23, 23, 0.3) 45%, rgba(23, 23, 23, 0.98) 100%);
   --onboarding-bg-image: url('/onboarding-bg-dark.jpg');
+  --dashboard-bg-image: url('/dashboard-bg-dark.png');
+  --navbar-height: 68px;
 }
 
 * {
@@ -86,11 +91,18 @@ h1, h2, h3, h4, .brand-font {
 }
 
 /* =========================================================
+   PAGE CONTENT OFFSET (START AFTER NAVBAR)
+========================================================= */
+.page-content-offset {
+  padding-top: var(--navbar-height);
+}
+
+/* =========================================================
    HERO WITH ADAPTIVE ARTWORK BACKGROUND
 ========================================================= */
 .hero-artwork-section {
   position: relative;
-  min-height: 88vh;
+  min-height: calc(100vh - var(--navbar-height));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -116,11 +128,13 @@ h1, h2, h3, h4, .brand-font {
 
 /* Minimal Navbar */
 .nav-minimal {
+  height: var(--navbar-height);
   background-color: var(--nav-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-subtle);
   transition: background-color 0.25s ease, border-color 0.25s ease;
+  z-index: 1030;
 }
 
 /* Clean Buttons */
@@ -255,30 +269,93 @@ h1, h2, h3, h4, .brand-font {
   text-transform: uppercase;
 }
 
+/* =========================================================
+   CLEAN DARK-COMPATIBLE TABLES
+========================================================= */
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-primary);
+  color: var(--text-primary) !important;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table th,
+.table td {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.table > :not(caption) > * > * {
+  background-color: transparent !important;
+  border-bottom-color: var(--border-subtle) !important;
+}
+
+.skill-table-row {
+  transition: background-color 0.15s ease;
+}
+
+.skill-table-row:hover td {
+  background-color: rgba(133, 136, 117, 0.08) !important;
+}
+
+/* Enhanced Tag Badges in Table */
 .tag-minimal-match {
-  background-color: var(--tag-matched-bg);
-  color: var(--tag-matched-text);
-  border: 1px solid var(--border-accent);
-  padding: 0.35rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 500;
+  background-color: rgba(46, 160, 67, 0.14);
+  color: #3fb950;
+  border: 1px solid rgba(63, 185, 80, 0.3);
+  padding: 0.32rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .tag-minimal-match {
+  background-color: rgba(46, 160, 67, 0.18);
+  color: #56d364;
+  border-color: rgba(63, 185, 80, 0.35);
 }
 
 .tag-minimal-gap {
-  background-color: var(--tag-gap-bg);
-  color: var(--tag-gap-text);
-  border: 1px solid var(--border-subtle);
-  padding: 0.35rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 500;
+  background-color: rgba(229, 72, 77, 0.12);
+  color: #ff6b6b;
+  border: 1px solid rgba(229, 72, 77, 0.3);
+  padding: 0.32rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .tag-minimal-gap {
+  background-color: rgba(229, 72, 77, 0.18);
+  color: #ff7b72;
+  border-color: rgba(229, 72, 77, 0.35);
+}
+
+.badge-weight-mandatory {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  font-weight: 600;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.badge-weight-preferred {
+  background-color: transparent;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-subtle);
+  font-weight: 500;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.65rem;
 }
 
 /* =========================================================
@@ -286,16 +363,17 @@ h1, h2, h3, h4, .brand-font {
 ========================================================= */
 .auth-split-wrapper {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--navbar-height));
+  margin-top: var(--navbar-height);
 }
 
-/* Left — Illustration panel (fixed, fills left half) */
+/* Left — Illustration panel (fixed, fills left half below navbar) */
 .auth-illustration-panel {
   position: fixed;
   left: 0;
-  top: 0;
+  top: var(--navbar-height);
   width: 50%;
-  height: 100vh;
+  height: calc(100vh - var(--navbar-height));
   overflow: hidden;
 }
 
@@ -319,7 +397,7 @@ h1, h2, h3, h4, .brand-font {
 .auth-form-panel {
   margin-left: 50%;
   width: 50%;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--navbar-height));
   display: flex;
   flex-direction: column;
   background-color: var(--bg-main);
@@ -474,6 +552,7 @@ h1, h2, h3, h4, .brand-font {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  padding-top: var(--navbar-height);
   background-image: var(--onboarding-bg-image);
   background-size: cover;
   background-position: left bottom;

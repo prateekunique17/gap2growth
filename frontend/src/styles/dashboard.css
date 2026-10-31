@@ -1,0 +1,195 @@
+/* =========================================================
+   DASHBOARD SIDEBAR & WORKSPACE LAYOUT
+========================================================= */
+.dashboard-layout {
+  display: flex;
+  min-height: calc(100vh - var(--navbar-height));
+  margin-top: var(--navbar-height);
+  background-color: var(--bg-main);
+  background-image: var(--dashboard-bg-image);
+  background-size: cover;
+  background-position: top right;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  transition: background-image 0.3s ease-in-out;
+}
+
+.dashboard-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+  background-color: var(--nav-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  position: sticky;
+  top: var(--navbar-height);
+  height: calc(100vh - var(--navbar-height));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5rem 1rem;
+  overflow-y: auto;
+  transition: all 0.25s ease;
+  z-index: 10;
+}
+
+.dashboard-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 8px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  background: transparent;
+  width: 100%;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.dashboard-nav-item:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-card);
+  border-color: var(--border-subtle);
+}
+
+.dashboard-nav-item.active {
+  color: var(--btn-primary-text);
+  background-color: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  font-weight: 600;
+}
+
+/* =========================================================
+   USER PROFILE POPUP MENU
+========================================================= */
+.sidebar-profile-card {
+  position: relative;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.sidebar-profile-card:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-profile-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  padding: 0.5rem;
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  animation: popupFadeIn 0.18s ease-out;
+}
+
+[data-theme="dark"] .sidebar-profile-popup {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+
+@keyframes popupFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sidebar-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sidebar-popup-item:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.sidebar-popup-item.logout {
+  color: #e5484d;
+}
+
+.sidebar-popup-item.logout:hover {
+  background-color: rgba(229, 72, 77, 0.1);
+  color: #e5484d;
+}
+
+.dashboard-main-content {
+  flex: 1;
+  min-width: 0;
+  padding: 2.25rem 2.5rem;
+  background-color: transparent;
+  overflow-y: auto;
+}
+
+/* Glass effect for clean cards inside dashboard workspace */
+.dashboard-layout .clean-card {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background-color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .dashboard-layout .clean-card {
+  background-color: rgba(36, 36, 36, 0.88);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 991px) {
+  .dashboard-layout {
+    flex-direction: column;
+  }
+  .dashboard-sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 1rem;
+  }
+  .dashboard-nav-list {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+  }
+  .dashboard-nav-item {
+    white-space: nowrap;
+    width: auto;
+  }
+  .dashboard-main-content {
+    padding: 1.5rem 1rem;
+  }
+}
+

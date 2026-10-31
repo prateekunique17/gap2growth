@@ -1,0 +1,152 @@
+/* =========================================================
+   ROADMAP TREE GRAPH VISUALIZATION STYLES
+========================================================= */
+
+.roadmap-tree-container {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 1.5rem 0.5rem;
+}
+
+.roadmap-tree-canvas {
+  position: relative;
+  min-width: 820px;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+/* Connecting Spine Line */
+.tree-spine-line {
+  stroke: var(--border-subtle);
+  stroke-width: 2px;
+  stroke-dasharray: 4 4;
+}
+
+.tree-spine-line.active {
+  stroke: var(--accent-olive);
+  stroke-width: 2.5px;
+  stroke-dasharray: none;
+}
+
+/* Node card interactives */
+.roadmap-tree-node {
+  position: relative;
+  cursor: pointer;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-subtle);
+  background-color: var(--bg-card);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.roadmap-tree-node:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-olive);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.roadmap-tree-node.expanded {
+  border-color: var(--accent-olive);
+  box-shadow: 0 8px 28px rgba(133, 136, 117, 0.2);
+}
+
+[data-theme="dark"] .roadmap-tree-node {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .roadmap-tree-node.expanded {
+  box-shadow: 0 8px 30px rgba(133, 136, 117, 0.3);
+}
+
+/* Subchildren branch tree connector lines */
+.tree-branch-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tree-branch-path {
+  fill: none;
+  stroke: var(--border-subtle);
+  stroke-width: 2px;
+  stroke-dasharray: 4 4;
+  transition: stroke 0.3s ease;
+}
+
+.tree-branch-path.active {
+  stroke: var(--accent-olive);
+  stroke-width: 2px;
+  stroke-dasharray: none;
+}
+
+.tree-subchildren-container {
+  animation: treeSpreadFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: top left;
+}
+
+@keyframes treeSpreadFade {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tree-task-leaf {
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-card);
+  transition: all 0.2s ease;
+}
+
+.tree-task-leaf:hover {
+  border-color: var(--accent-olive);
+  transform: translateX(3px);
+}
+
+/* Project Badge & Project Card Highlight */
+.tree-task-leaf.is-project {
+  border-left: 3.5px solid var(--accent-olive);
+  background: linear-gradient(to right, rgba(133, 136, 117, 0.06), var(--bg-card) 40%);
+}
+
+.badge-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.22rem 0.55rem;
+  border-radius: 4px;
+  background-color: rgba(133, 136, 117, 0.18);
+  color: var(--text-primary);
+  border: 1px solid var(--accent-olive);
+}
+
+.badge-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}

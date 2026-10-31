@@ -9,10 +9,10 @@ export default function SkillAnalyzerPage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   return (
-    <div className="min-vh-100 d-flex flex-column">
+    <div className="min-vh-100 d-flex flex-column page-content-offset">
       <Navbar onOpenAuth={() => setShowAuthModal(true)} />
       
-      <main className="container pt-5 pb-5 mt-5">
+      <main className="container py-5">
         <div className="pt-4 mb-4">
           <span className="badge-minimal">Skill Analyzer</span>
           <h2 className="display-6 fw-bold mt-2" style={{ color: 'var(--text-primary)' }}>

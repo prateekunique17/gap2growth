@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
-import { ArrowRight, ArrowLeft, Upload, FileText, CheckCircle2, X, Plus } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Upload, FileText, CheckCircle2, X, Plus, AlertCircle } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
+import { uploadResume, analyzeSkills } from '../../lib/api';
 
 const TOTAL_STEPS = 6; // 5 questions + 1 resume upload
 
@@ -83,7 +84,9 @@ export default function OnboardingPage() {
 
   // Resume upload state
   const [resumeFile, setResumeFile] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0); // 0: idle, 1: uploading, 2: parsing, 3: done
+  const [uploadProgress, setUploadProgress] = useState(0); // 0: idle, 1: uploading/parsing, 2: ready, 3: analyzing, 4: done
+  const [uploadError, setUploadError] = useState('');
+  const [parsedData, setParsedData] = useState(null);
 
   const toggleCompany = (company) => {
     // Single selection for now: if already selected, clear it; otherwise replace with selected company
@@ -115,26 +118,54 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleNext = () => {
-    if (step < TOTAL_STEPS) {
-      setStep(step + 1);
-    } else {
-      // Final step — go to dashboard
-      alert('Onboarding complete! Redirecting to dashboard...');
-      navigate('/dashboard');
-    }
-  };
-
   const handleBack = () => {
     if (step > 1) setStep(step - 1);
   };
 
-  const handleFileSelect = (file) => {
+  const handleFileSelect = async (file) => {
     if (!file) return;
     setResumeFile(file);
-    setUploadProgress(1);
-    setTimeout(() => setUploadProgress(2), 800);
-    setTimeout(() => setUploadProgress(3), 2000);
+    setUploadError('');
+    setUploadProgress(1); // Uploading & parsing
+
+    try {
+      const result = await uploadResume(file);
+      setParsedData(result);
+      setUploadProgress(2); // Ready
+    } catch (err) {
+      console.error('Resume upload error:', err);
+      setUploadError(err.message || 'Failed to parse resume. You can still proceed or try another file.');
+      setUploadProgress(0);
+    }
+  };
+
+  const handleNext = async () => {
+    if (step < TOTAL_STEPS) {
+      setStep(step + 1);
+    } else {
+      // Step 6 finish: if a resume was uploaded, optionally kick off initial skill analysis
+      const resolvedTargetRole = isOtherTargetRole ? customTargetRole.trim() : targetRole;
+      const resolvedCompany = targetCompanies[0] || 'Top Tier Tech';
+
+      if (parsedData) {
+        setUploadProgress(3); // Analyzing skills
+        try {
+          await analyzeSkills({
+            dream_job_role: resolvedTargetRole || 'Software Engineer',
+            dream_company: resolvedCompany,
+            location: 'Remote',
+            education_level: 'Undergraduate',
+            experience_level: currentRole || 'Intermediate',
+            known_skills: parsedData.parsed?.skills?.map((s) => typeof s === 'string' ? s : s.name).filter(Boolean) || [],
+          });
+        } catch (err) {
+          console.warn('Initial skill analysis error:', err);
+          // Non-blocking: user can still view the dashboard
+        }
+      }
+
+      navigate('/dashboard');
+    }
   };
 
   const handleDrop = (e) => {
@@ -153,7 +184,7 @@ export default function OnboardingPage() {
     <div className="onboarding-layout">
       <Navbar />
 
-      <div className="flex-grow-1 d-flex flex-column justify-content-center mt-5 pt-4">
+      <div className="flex-grow-1 d-flex flex-column justify-content-center py-4">
         <div className="container py-4">
           <div className="row justify-content-center">
             <div className="col-lg-7 col-xl-6">
@@ -432,6 +463,14 @@ export default function OnboardingPage() {
                       We'll extract your skills automatically. You can also skip this and add it later.
                     </p>
 
+                    {/* Upload Error feedback */}
+                    {uploadError && (
+                      <div className="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-3" role="alert">
+                        <AlertCircle size={16} className="flex-shrink-0" />
+                        <span>{uploadError}</span>
+                      </div>
+                    )}
+
                     {!resumeFile ? (
                       <div
                         className="clean-dropzone p-5 text-center"
@@ -470,10 +509,10 @@ export default function OnboardingPage() {
                             </div>
                           </div>
                           <div className="d-flex align-items-center gap-2">
-                            <span className="small fw-bold" style={{ color: uploadProgress === 3 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                              {uploadProgress === 1 && 'Uploading...'}
-                              {uploadProgress === 2 && 'Parsing skills...'}
-                              {uploadProgress === 3 && 'Ready ✓'}
+                            <span className="small fw-bold" style={{ color: uploadProgress >= 2 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                              {uploadProgress === 1 && 'Uploading & Parsing...'}
+                              {uploadProgress === 2 && 'Ready ✓'}
+                              {uploadProgress === 3 && 'Analyzing Skills...'}
                             </span>
                             <button
                               type="button"
@@ -492,7 +531,7 @@ export default function OnboardingPage() {
                             style={{
                               height: '100%',
                               backgroundColor: 'var(--meter-bar)',
-                              width: uploadProgress === 1 ? '30%' : uploadProgress === 2 ? '70%' : '100%',
+                              width: uploadProgress === 1 ? '45%' : '100%',
                               transition: 'width 0.4s ease',
                             }}
                           ></div>
