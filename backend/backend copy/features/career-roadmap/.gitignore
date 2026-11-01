@@ -1,2 +1,8 @@
 data/*.json
+data/*.jsonl
 data/*.tmp
+data/*.cache
+data/exam-sessions/
+data/exam-sessions/*
+!data/.gitkeep
+!data/exam-sessions/.gitkeep

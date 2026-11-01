@@ -12,14 +12,22 @@ const port = Number(process.env.PORT || 5000);
 const host = process.env.HOST || '127.0.0.1';
 const allowedOrigins = new Set((process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
+// Allow local backend origins (used by Safe Exam Browser kiosk connecting directly to port 5000)
+allowedOrigins.add(`http://${host}:${port}`);
+allowedOrigins.add(`http://localhost:${port}`);
+allowedOrigins.add(`http://127.0.0.1:${port}`);
 
 app.disable('x-powered-by');
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // allow loading local scripts for SEB kiosk
+}));
 app.use(cors({ origin(origin, callback) {
   if (!origin || allowedOrigins.has(origin)) return callback(null, true);
   return callback(new Error('Origin is not allowed by CORS.'));
 } }));
 app.use(express.json({ limit: '1mb' }));
+// Serve exam frontend assets for Safe Exam Browser
+app.use('/api/career/exam-assets', express.static(path.join(__dirname, 'features/career-roadmap/exam')));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'career-roadmap-backend' }));
 app.use('/api/career', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/career', careerRoadmap);

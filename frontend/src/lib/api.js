@@ -117,13 +117,32 @@ export async function getCareerState() {
 }
 
 /**
- * Health check
+ * Generate Milestone Exam in Safe Exam Browser
+ * Sends POST /api/career/exam/generate
+ * Body: { milestoneId, questionCount, difficulty }
  */
-export async function checkBackendHealth() {
-  try {
-    const res = await fetch(`${API_BASE_URL}/health`);
-    return res.ok;
-  } catch {
-    return false;
+export async function generateMilestoneExam(milestoneId, questionCount = 10, difficulty = 'medium') {
+  const res = await fetch(`${API_BASE_URL}/exam/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ milestoneId, questionCount, difficulty }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to generate milestone exam.');
   }
+  return data;
+}
+
+/**
+ * Check Milestone Exam Status (Score, Pass status)
+ * Sends GET /api/career/exam/status/:milestoneId
+ */
+export async function checkMilestoneExamStatus(milestoneId) {
+  const res = await fetch(`${API_BASE_URL}/exam/status/${encodeURIComponent(milestoneId)}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to check exam status.');
+  }
+  return data;
 }

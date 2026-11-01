@@ -1,5 +1,7 @@
-const express=require('express');const multer=require('multer');const crypto=require('crypto');
+const express=require('express');const multer=require('multer');const crypto=require('crypto');const path=require('path');const fs=require('fs/promises');
 const {extractText,parseResumeText,cleanResumeSkills}=require('../resume/parser');const {readState,updateState,clearState}=require('../storage');const {analyze,validateAnalysis}=require('../skillAnalysis/service');const {generateRoadmap,validateRoadmap}=require('../roadmap/service');const {getRecommendations,buildJobBenchmarks,buildRadarAttributes,profileCacheKey}=require('../jobRecommendations/service');
+const {isSeb,createMilestoneExam,generateSebConfig,getExamSession,gradeAndCompleteExam}=require('../exam/service');
+const { supabase } = require('../storage/supabaseStore');
 const router=express.Router();const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:8*1024*1024},fileFilter(_req,file,cb){const ext=file.originalname.toLowerCase().split('.').pop();cb(null,['pdf','docx','txt'].includes(ext));}});
 const ROADMAP_GENERATOR_VERSION='comprehensive-multitrack-v2';
 const ANALYSIS_VERSION='five-dimension-v2';
@@ -74,6 +76,177 @@ router.patch('/progress/task/:taskId',async(req,res,next)=>{try{if(typeof req.bo
 router.patch('/progress/milestone/:milestoneId',async(req,res,next)=>{try{if(typeof req.body?.completed!=='boolean')return res.status(400).json({error:'Body must include boolean completed.'});let updated;await updateState(userId(req),s=>{if(s.analysis?.analysis_version!==ANALYSIS_VERSION||!s.roadmap)throw Object.assign(Error('Run analysis and generate a roadmap first.'),{statusCode:404});const stop=s.roadmap.stops.find(x=>x.id===req.params.milestoneId);if(!stop)throw Object.assign(Error('Milestone not found.'),{statusCode:404});if(req.body.completed&&stop.prerequisites.some(id=>!s.roadmap.stops.find(x=>x.id===id&&x.status==='completed')))throw Object.assign(Error('Complete prerequisite stops first.'),{statusCode:409});if(!req.body.completed&&hasCompletedDependents(s.roadmap,stop.id))throw Object.assign(Error('Reset completed dependent stops first.'),{statusCode:409});stop.tasks=stop.tasks.map(t=>({...t,done:req.body.completed}));stop.status=req.body.completed?'completed':'pending';updated=s.roadmap;return s;});res.json({roadmap:updated,progress:progressOf(updated)});}catch(e){next(e);}});
 async function recommendations(req,res,next,force){try{const id=userId(req);let state=await readState(id);if(!state.profile)state={...state,profile:defaults};if(state.analysis?.analysis_version!==ANALYSIS_VERSION)state={...state,analysis:null};const result=await getRecommendations(state,force);await updateState(id,s=>({...s,profile:state.profile,jobs:result}));res.json(result);}catch(e){next(e);}}
 router.get('/recommended-jobs', (req,res,next)=>recommendations(req,res,next,false));router.post('/refresh-jobs',(req,res,next)=>recommendations(req,res,next,true));
+
+// ==========================================
+// INTEGRATED MILESTONE EXAM & SEB ROUTES
+// ==========================================
+const examPublicDir = path.resolve(__dirname, '../exam');
+
+router.post('/exam/generate', async (req, res, next) => {
+  try {
+    const id = userId(req);
+    const { milestoneId, questionCount = 10, difficulty = 'medium' } = req.body || {};
+    if (!milestoneId) return res.status(400).json({ error: 'milestoneId is required.' });
+
+    const s = await readState(id);
+    const stop = (s.roadmap?.stops || []).find(st => st.id === milestoneId);
+    if (!stop) return res.status(404).json({ error: 'Milestone not found in active roadmap.' });
+
+    console.log(`[career-exam] Generating exam for candidate ${id} on milestone: ${stop.title}`);
+    const examData = await createMilestoneExam({
+      candidateId: id,
+      milestoneId: stop.id,
+      milestoneTitle: stop.title,
+      skills: stop.skills || [],
+      topics: stop.topics || [],
+      questionCount,
+      difficulty,
+    });
+
+    res.json(examData);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/exam/seb-page', async (_req, res) => {
+  try {
+    const content = await fs.readFile(path.join(examPublicDir, 'seb-exam.html'));
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(content);
+  } catch {
+    res.status(404).send('SEB Exam page not found');
+  }
+});
+
+router.get('/exam/seb-exit', (_req, res) => {
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.end('<!doctype html><meta charset="utf-8"><title>Exam finished</title><p>Exam submitted. Safe Exam Browser is closing and returning you to the roadmap.</p>');
+});
+
+router.get('/exam/seb-config/:token.seb', (req, res) => {
+  const token = req.params.token;
+  const origin = `${req.protocol}://${req.get('host')}`;
+  const plist = generateSebConfig(token, origin);
+  if (!plist) return res.status(404).json({ error: 'Exam session not found or expired.' });
+
+  res.writeHead(200, {
+    'content-type': 'application/seb',
+    'content-disposition': 'inline; filename="milestone-exam.seb"',
+    'cache-control': 'no-store'
+  });
+  res.end(plist);
+});
+
+router.get('/exam/session/:token', (req, res) => {
+  if (!isSeb(req)) {
+    return res.status(403).json({ error: 'Open this milestone exam inside Safe Exam Browser.' });
+  }
+  const token = req.params.token;
+  const exam = getExamSession(token);
+  if (!exam || Date.now() - exam.issuedAt > 4 * 60 * 60 * 1000) {
+    return res.status(404).json({ error: 'This exam session is not available or has expired.' });
+  }
+  if (!exam.startedAt) exam.startedAt = Date.now();
+
+  res.json({
+    candidateId: exam.candidateId,
+    milestoneId: exam.milestoneId,
+    milestoneTitle: exam.milestoneTitle,
+    topic: exam.milestoneTitle,
+    skills: exam.skills,
+    topics: exam.topics,
+    questions: exam.questions,
+    durationSeconds: exam.durationSeconds,
+    secondsRemaining: Math.max(0, exam.durationSeconds - Math.floor((Date.now() - exam.startedAt) / 1000))
+  });
+});
+
+router.post('/exam/results', async (req, res, next) => {
+  try {
+    if (!isSeb(req)) {
+      return res.status(403).json({ error: 'Submit this exam from Safe Exam Browser.' });
+    }
+    const { examToken, answers } = req.body || {};
+    if (!examToken || !Array.isArray(answers)) {
+      return res.status(400).json({ error: 'Invalid exam submission payload.' });
+    }
+
+    const record = gradeAndCompleteExam(examToken, answers);
+    if (!record) return res.status(400).json({ error: 'Invalid or expired exam session.' });
+
+    const id = record.candidateId || userId(req);
+
+    // 1) Save exam result to Supabase exam_results table
+    if (supabase) {
+      try {
+        const { error: insertErr } = await supabase
+          .from('exam_results')
+          .insert({
+            user_id: id,
+            milestone_id: record.milestoneId,
+            milestone_title: record.milestoneTitle,
+            score: record.score,
+            total: record.total,
+            percentage: record.percentage,
+            passed: record.passed,
+            submitted_at: record.submittedAt,
+            exam_token: record.examToken,
+          });
+        if (insertErr) {
+          console.warn('[career-exam] Supabase exam_results insert error:', insertErr.message);
+        } else {
+          console.log(`[career-exam] Saved exam result to Supabase for user ${id}, milestone ${record.milestoneId}: ${record.percentage}% ${record.passed ? 'PASSED' : 'FAILED'}`);
+        }
+      } catch (sbErr) {
+        console.warn('[career-exam] Supabase exam_results exception:', sbErr.message);
+      }
+    }
+
+    // 2) Update the roadmap state (also syncs to Supabase via updateState)
+    try {
+      await updateState(id, s => {
+        if (!s.roadmap) return s;
+        const stop = s.roadmap.stops?.find(x => x.id === record.milestoneId);
+        if (stop) {
+          if (record.passed) {
+            stop.tasks = stop.tasks.map(t => ({ ...t, done: true }));
+            stop.status = 'completed';
+          }
+          stop.exam_result = {
+            score: record.score,
+            total: record.total,
+            percentage: record.percentage,
+            passed: record.passed,
+            verified_at: record.submittedAt,
+          };
+        }
+        return s;
+      });
+    } catch (err) {
+      console.warn('[career-exam] State update note:', err.message);
+    }
+
+    res.status(201).json({ saved: true, result: record });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/exam/status/:milestoneId', async (req, res) => {
+  try {
+    const id = userId(req);
+    const s = await readState(id);
+    const stop = (s.roadmap?.stops || []).find(st => st.id === req.params.milestoneId);
+    res.json({
+      milestoneId: req.params.milestoneId,
+      status: stop?.status || 'pending',
+      exam_result: stop?.exam_result || null
+    });
+  } catch {
+    res.status(500).json({ error: 'Could not fetch exam status.' });
+  }
+});
 router.delete('/data',async(req,res,next)=>{try{await clearState(userId(req));res.json({deleted:true});}catch(e){next(e);}});
 router.use((err,req,res,_next)=>{if(err instanceof multer.MulterError)return res.status(err.code==='LIMIT_FILE_SIZE'?413:400).json({error:err.message});const status=err.statusCode||500;const requestId=crypto.randomUUID();console.error('[career-roadmap]',requestId,status,err.errorCode||'REQUEST_ERROR',err.providerStatus||'',err.message);const safeError=err.publicMessage||(status>=500?'Career roadmap request failed. Check backend logs for details.':err.message);res.setHeader('X-Request-Id',requestId);res.status(status).json({error:safeError,request_id:requestId,error_code:err.errorCode||undefined,provider_status:err.providerStatus||undefined,provider_code:err.providerCode||undefined});});
 module.exports=router;

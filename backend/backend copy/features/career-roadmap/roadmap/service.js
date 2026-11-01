@@ -17,7 +17,11 @@ const TASK_SCHEMA = {
 
 const RESOURCE_SCHEMA = {
   type: 'object',
-  properties: { title: { type: 'string' }, url: { type: 'string' } },
+  properties: { 
+    title: { type: 'string' }, 
+    url: { type: 'string' },
+    type: { type: 'string', description: 'documentation | video | course' }
+  },
   required: ['title', 'url'],
 };
 
@@ -367,6 +371,7 @@ function trackPrompt(track, analysis, profile, requirementMap, projects) {
     'Expand this one learning track into a detailed, comprehensive JSON curriculum matching the schema.',
     'Create 4 to 6 distinct milestones for this track and 5 to 8 actionable tasks in every milestone. A milestone should cover a focused level of depth, not a single broad technology name.',
     'Every skill assigned to this track must appear exactly in at least one milestone skills list. Teach foundations before advanced use. Include specific subtopics, exercises, measurable completion criteria, and free HTTPS learning resources.',
+    'For resources in every milestone, provide a mix of official documentation and targeted YouTube video tutorials: include 1-2 curated YouTube video tutorial links (e.g., https://www.youtube.com/results?search_query=... for direct video tutorials) along with official documentation guides. Set resource.type as "video" or "documentation".',
     'Use the supplied resume evidence and candidate score to calibrate each milestone. Teach foundational concepts before advanced use, and do not assume prior mastery.',
     'Every milestone must include at least two explicit code practice tasks. For each code task fill kind="code", language, a concrete code_prompt, a short starter_code skeleton, expected_behavior, and 2 or more validation_steps. Make code prompts specific to the named technologies and include edge cases or tests.',
     'Do not say tasks are already completed. Keep prerequisites limited to earlier milestone IDs from this track; the backend will connect tracks in the supplied order.',
@@ -562,10 +567,33 @@ function normalizeRoadmap(value, profile = {}, analysis = {}, minimumStops = 0) 
       try {
         const url = new URL(urlText);
         if (url.protocol !== 'https:') return [];
-        return [{ title: String(resource?.title || `Free ${title} resource`).slice(0, 120), url: url.toString() }];
+        const isYoutube = url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be');
+        const detectedType = isYoutube ? 'video' : (resource?.type || 'documentation');
+        return [{ 
+          title: String(resource?.title || `Free ${title} resource`).slice(0, 120), 
+          url: url.toString(),
+          type: detectedType
+        }];
       } catch { return []; }
-    }).slice(0, 8);
-    if (!resources.length) resources.push({ title: `Find free ${title} learning resources`, url: `https://www.google.com/search?q=${encodeURIComponent(`free ${title} course`)}` });
+    }).slice(0, 10);
+
+    // Ensure at least one YouTube video link exists if not provided
+    const hasVideo = resources.some((r) => r.type === 'video' || r.url.includes('youtube.com'));
+    if (!hasVideo) {
+      resources.push({
+        title: `${title} Video Tutorial`,
+        url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} tutorial video`)}`,
+        type: 'video'
+      });
+    }
+
+    if (!resources.some((r) => r.type === 'documentation' || !r.url.includes('youtube.com'))) {
+      resources.unshift({
+        title: `${title} Official Documentation & Guide`,
+        url: `https://www.google.com/search?q=${encodeURIComponent(`${title} documentation tutorial`)}`,
+        type: 'documentation'
+      });
+    }
     const priority = String(stop?.priority || 'medium').toLowerCase();
     return {
       id, title, track_id: cleanText(stop?.track_id, `track-${Math.floor(index / 4) + 1}`),

@@ -28,7 +28,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="lead fs-4 mb-5 mx-auto" style={{ color: 'var(--text-secondary)', maxWidth: 640, lineHeight: 1.5, textShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                A tool that shows you the exact distance between the skills on your resume and your target role — then gives you a structured roadmap to close it.
+                A tool that shows you the exact distance between the skills on your resume and your target role then gives you a structured roadmap to close it.
               </p>
 
               <div className="d-flex flex-column flex-sm-row justify-content-center gap-3 mb-5">
@@ -99,7 +99,7 @@ export default function LandingPage() {
                 </div>
                 <h5 className="fw-bold mb-2">Skill Gap Analysis</h5>
                 <p className="small mb-0" style={{ color: 'var(--text-secondary)' }}>
-                  See exactly which skills you have, which are weak, and which are missing for your target role — scored with a readiness percentage.
+                  See exactly which skills you have, which are weak, and which are missing for your target role scored with a readiness percentage.
                 </p>
               </div>
             </div>

@@ -41,7 +41,12 @@ Thumbs.db
 *.tmp
 *.temp
 backend/**/data/*.json
+backend/**/data/*.jsonl
 backend/**/data/*.tmp
 backend/**/data/*.cache
+backend/**/data/exam-sessions/
+backend/**/data/exam-sessions/*
+backend/**/data/results.jsonl
 !backend/**/data/.gitkeep
+!backend/**/data/exam-sessions/.gitkeep
 

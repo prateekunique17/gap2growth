@@ -2,10 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, Clock, ExternalLink, Sparkles, Plus, BookOpen, Loader2, 
   AlertCircle, ChevronRight, ChevronDown, GitBranch, FolderGit2, Check, 
-  CircleDot, HelpCircle, Layers, ArrowDown, FolderCode, FileText
+  CircleDot, HelpCircle, Layers, ArrowDown, FolderCode, FileText, Video,
+  ShieldCheck, Award, PlayCircle
 } from 'lucide-react';
-import { generateRoadmap, updateTaskProgress, getCareerState } from '../../../lib/api';
+import { generateRoadmap, updateTaskProgress, getCareerState, generateMilestoneExam } from '../../../lib/api';
 import '../../../styles/roadmapTree.css';
+
+// Helper to extract YouTube video ID or construct high-quality thumbnail URL
+function getYouTubeThumbnail(url, title = '') {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    let videoId = null;
+    if (parsed.hostname.includes('youtu.be')) {
+      videoId = parsed.pathname.slice(1).split('?')[0];
+    } else if (parsed.hostname.includes('youtube.com')) {
+      videoId = parsed.searchParams.get('v');
+    }
+    if (videoId) {
+      return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    }
+  } catch {}
+  return null;
+}
 
 /**
  * Classifies sub-components/tasks into Project vs Exercise/Task.
@@ -73,6 +92,7 @@ export default function RoadmapGenerationView() {
   const [errorMsg, setErrorMsg] = useState('');
   const [roadmapData, setRoadmapData] = useState(null);
   const [updatingTaskId, setUpdatingTaskId] = useState(null);
+  const [examModalState, setExamModalState] = useState(null); // { stop, loading, examData, pollInterval }
   // Store expanded milestone stop IDs.
   const [expandedStops, setExpandedStops] = useState({});
 
@@ -221,6 +241,51 @@ export default function RoadmapGenerationView() {
 
   const collapseAll = () => {
     setExpandedStops({});
+  };
+
+  // Handle launching SEB exam for a milestone
+  const handleStartExam = async (stop) => {
+    setExamModalState({ stop, loading: true, examData: null });
+    try {
+      const data = await generateMilestoneExam(stop.id, 10, 'medium');
+      setExamModalState({ stop, loading: false, examData: data });
+    } catch (err) {
+      console.error('[Milestone Exam Error]', err);
+      alert(err.message || 'Failed to generate milestone exam. Ensure backend is running.');
+      setExamModalState(null);
+    }
+  };
+
+  const handleLaunchSeb = (examToken, currentStop) => {
+    // SEB must connect directly to the backend API host (port 5000), not the Vite dev server (port 5173)
+    const backendHost = '127.0.0.1:5000';
+    const targetStopId = currentStop?.id || examModalState?.stop?.id;
+    window.location.href = `seb://${backendHost}/api/career/exam/seb-config/${encodeURIComponent(examToken)}.seb`;
+
+    // Start polling for completed exam results
+    const pollId = setInterval(async () => {
+      try {
+        const state = await getCareerState();
+        if (state?.roadmap) {
+          const updatedStop = (state.roadmap.stops || []).find(s => s.id === targetStopId);
+          if (updatedStop?.exam_result) {
+            clearInterval(pollId);
+            setRoadmapData(state.roadmap);
+            setExamModalState((prev) => prev ? { ...prev, finishedResult: updatedStop.exam_result } : null);
+          }
+        }
+      } catch {}
+    }, 2500);
+
+    setExamModalState(prev => ({ ...prev, launched: true, pollInterval: pollId }));
+  };
+
+  // Close exam modal and clear polling
+  const closeExamModal = () => {
+    if (examModalState?.pollInterval) {
+      clearInterval(examModalState.pollInterval);
+    }
+    setExamModalState(null);
   };
 
   // Toggle task done via PATCH /api/career/progress/task/:taskId
@@ -646,59 +711,268 @@ export default function RoadmapGenerationView() {
                         })}
 
                         {/* Subchildren: Resources Leaf Node */}
-                        {(stop.resources || []).length > 0 && (
-                          <div className="position-relative mt-1">
-                            {/* Curved Branch Line to Resources Leaf */}
-                            <svg 
-                              className="position-absolute" 
-                              style={{ left: -26, top: 14, width: 30, height: 20, pointerEvents: 'none' }}
-                            >
-                              <path 
-                                d="M 2 2 Q 2 12, 28 12" 
-                                fill="none" 
-                                stroke="var(--accent-olive)" 
-                                strokeWidth="1.5" 
-                                opacity="0.6"
-                              />
-                            </svg>
+                        {(() => {
+                          const allResources = [...(stop.resources || [])];
+                          // If no explicit video resource in legacy state, provide direct YouTube video search
+                          const hasVideo = allResources.some(
+                            (r) => r.type === 'video' || (r.url && (r.url.includes('youtube.com') || r.url.includes('youtu.be')))
+                          );
+                          if (!hasVideo && stop.title) {
+                            allResources.push({
+                              title: `${stop.title} Video Tutorial`,
+                              url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${stop.title} video tutorial`)}`,
+                              type: 'video',
+                            });
+                          }
 
-                            <div 
-                              className="tree-task-leaf p-2.5 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2"
-                              style={{ 
-                                backgroundColor: 'var(--bg-surface)',
-                                borderStyle: 'dashed'
-                              }}
-                            >
-                              <div className="d-flex align-items-center gap-2">
-                                <BookOpen size={14} style={{ color: 'var(--accent-olive)' }} />
-                                <span className="small fw-semibold" style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-                                  Target Curriculum & Study Documentation:
-                                </span>
-                              </div>
+                          if (!allResources.length) return null;
 
-                              <div className="d-flex flex-wrap gap-2">
-                                {stop.resources.map((res, rIdx) => (
-                                  <a
-                                    key={rIdx}
-                                    href={res.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="d-inline-flex align-items-center gap-1.5 small text-decoration-none px-2 py-1 rounded border"
-                                    style={{ 
-                                      backgroundColor: 'var(--bg-card)', 
-                                      borderColor: 'var(--border-subtle)',
-                                      color: 'var(--text-primary)',
-                                      fontSize: '0.75rem' 
-                                    }}
-                                  >
-                                    <span>{res.title}</span>
-                                    <ExternalLink size={12} style={{ color: 'var(--text-muted)' }} />
-                                  </a>
-                                ))}
+                          const videoResources = allResources.filter(
+                            (r) => r.type === 'video' || (r.url && (r.url.includes('youtube.com') || r.url.includes('youtu.be')))
+                          );
+                          const docResources = allResources.filter(
+                            (r) => !(r.type === 'video' || (r.url && (r.url.includes('youtube.com') || r.url.includes('youtu.be'))))
+                          );
+
+                          return (
+                            <div className="position-relative mt-2">
+                              {/* Curved Branch Line to Resources Leaf */}
+                              <svg 
+                                className="position-absolute" 
+                                style={{ left: -26, top: 14, width: 30, height: 20, pointerEvents: 'none' }}
+                              >
+                                <path 
+                                  d="M 2 2 Q 2 12, 28 12" 
+                                  fill="none" 
+                                  stroke="var(--accent-olive)" 
+                                  strokeWidth="1.5" 
+                                  opacity="0.6"
+                                />
+                              </svg>
+
+                              <div 
+                                className="tree-task-leaf p-3 d-flex flex-column gap-3"
+                                style={{ 
+                                  backgroundColor: 'var(--bg-surface)',
+                                  borderStyle: 'dashed'
+                                }}
+                              >
+                                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                  <div className="d-flex align-items-center gap-2">
+                                    <BookOpen size={14} style={{ color: 'var(--accent-olive)' }} />
+                                    <span className="small fw-semibold" style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                                      Target Curriculum & Study Documentation:
+                                    </span>
+                                  </div>
+
+                                  {/* Documentation Links */}
+                                  {docResources.length > 0 && (
+                                    <div className="d-flex flex-wrap gap-2">
+                                      {docResources.map((res, rIdx) => (
+                                        <a
+                                          key={rIdx}
+                                          href={res.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="d-inline-flex align-items-center gap-1.5 small text-decoration-none px-2 py-1 rounded border"
+                                          style={{ 
+                                            backgroundColor: 'var(--bg-card)', 
+                                            borderColor: 'var(--border-subtle)',
+                                            color: 'var(--text-primary)',
+                                            fontSize: '0.75rem' 
+                                          }}
+                                          title={res.title}
+                                        >
+                                          <BookOpen size={12} style={{ color: 'var(--text-muted)' }} />
+                                          <span className="fw-medium">{res.title}</span>
+                                          <ExternalLink size={11} style={{ opacity: 0.6 }} />
+                                        </a>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* YouTube Video Cards with Subnode-Sized Thumbnails */}
+                                {videoResources.length > 0 && (
+                                  <div className="d-flex flex-column gap-2 pt-1">
+                                    <div className="d-flex align-items-center gap-1.5">
+                                      <Video size={13} style={{ color: '#ef4444' }} />
+                                      <span className="small fw-bold text-uppercase" style={{ color: 'var(--text-muted)', fontSize: '0.68rem', letterSpacing: '0.05em' }}>
+                                        Recommended YouTube Video Guides
+                                      </span>
+                                    </div>
+
+                                    <div className="row g-2">
+                                      {videoResources.map((vRes, vIdx) => {
+                                        const directThumb = getYouTubeThumbnail(vRes.url, vRes.title);
+                                        return (
+                                          <div key={vIdx} className="col-12 col-md-6">
+                                            <a
+                                              href={vRes.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="p-2 rounded-2 border text-decoration-none d-flex align-items-center gap-3 h-100 transition-all"
+                                              style={{
+                                                backgroundColor: 'var(--bg-card)',
+                                                borderColor: 'var(--border-subtle)',
+                                              }}
+                                            >
+                                              {/* Video Thumbnail Box */}
+                                              <div 
+                                                className="position-relative rounded overflow-hidden flex-shrink-0 d-flex align-items-center justify-content-center"
+                                                style={{
+                                                  width: 104,
+                                                  height: 60,
+                                                  backgroundColor: '#0f172a',
+                                                  backgroundImage: directThumb ? `url(${directThumb})` : 'none',
+                                                  backgroundSize: 'cover',
+                                                  backgroundPosition: 'center',
+                                                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                                                }}
+                                              >
+                                                {!directThumb && (
+                                                  <div className="text-center p-1">
+                                                    <span className="d-block fw-bold text-white text-truncate" style={{ fontSize: '0.65rem' }}>
+                                                      {stop.title?.split(' ')[0] || 'YouTube'}
+                                                    </span>
+                                                    <span className="small text-danger fw-bold" style={{ fontSize: '0.6rem' }}>
+                                                      VIDEO
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {/* Play Button Overlay */}
+                                                <div 
+                                                  className="position-absolute rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                                                  style={{
+                                                    width: 24,
+                                                    height: 24,
+                                                    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                                                    color: '#ffffff'
+                                                  }}
+                                                >
+                                                  <div 
+                                                    style={{ 
+                                                      width: 0, 
+                                                      height: 0, 
+                                                      borderTop: '4px solid transparent',
+                                                      borderBottom: '4px solid transparent',
+                                                      borderLeft: '7px solid white',
+                                                      marginLeft: 2
+                                                    }} 
+                                                  />
+                                                </div>
+                                              </div>
+
+                                              {/* Title & Channel / Watch Info */}
+                                              <div className="overflow-hidden flex-grow-1">
+                                                <span 
+                                                  className="d-block fw-semibold text-truncate small mb-1" 
+                                                  style={{ color: 'var(--text-primary)', fontSize: '0.78rem' }}
+                                                  title={vRes.title}
+                                                >
+                                                  {vRes.title}
+                                                </span>
+                                                <div className="d-flex align-items-center gap-1.5">
+                                                  <span className="badge rounded-pill px-1.5 py-0.5 text-danger bg-danger-subtle" style={{ fontSize: '0.65rem', fontWeight: 600 }}>
+                                                    YouTube
+                                                  </span>
+                                                  <span className="small d-flex align-items-center gap-1" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                                                    Watch Video <ExternalLink size={10} />
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </a>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
+                          );
+                        })()}
+
+                        {/* SINGLE MILESTONE CERTIFICATION EXAM CARD (Once per Node) */}
+                        <div className="position-relative mt-2">
+                          {/* Curved Branch Line to Exam Leaf */}
+                          <svg 
+                            className="position-absolute" 
+                            style={{ left: -26, top: 20, width: 30, height: 20, pointerEvents: 'none' }}
+                          >
+                            <path 
+                              d="M 2 2 Q 2 12, 28 12" 
+                              fill="none" 
+                              stroke={stop.exam_result?.passed ? '#10b981' : 'var(--accent-olive)'} 
+                              strokeWidth="1.5" 
+                              opacity="0.8"
+                            />
+                          </svg>
+
+                          <div 
+                            className="tree-task-leaf p-3.5 d-flex flex-wrap align-items-center justify-content-between gap-3 shadow-sm"
+                            style={{
+                              backgroundColor: stop.exam_result?.passed ? 'rgba(16, 185, 129, 0.08)' : 'var(--bg-card)',
+                              border: `1.5px solid ${stop.exam_result?.passed ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-subtle)'}`,
+                              borderLeft: `4px solid ${stop.exam_result?.passed ? '#10b981' : 'var(--accent-olive)'}`,
+                            }}
+                          >
+                            <div className="d-flex align-items-center gap-3">
+                              <div 
+                                className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  backgroundColor: stop.exam_result?.passed ? '#10b981' : 'var(--bg-surface)',
+                                  color: stop.exam_result?.passed ? '#ffffff' : 'var(--accent-olive)',
+                                  border: '1.5px solid var(--border-subtle)'
+                                }}
+                              >
+                                {stop.exam_result?.passed ? <Award size={22} /> : <ShieldCheck size={22} />}
+                              </div>
+                              <div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <h6 className="fw-bold mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.92rem' }}>
+                                    Milestone Mastery Assessment (SEB)
+                                  </h6>
+                                  {stop.exam_result?.passed ? (
+                                    <span className="badge rounded-pill bg-success-subtle text-success px-2.5 py-0.5" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                                      VERIFIED ({stop.exam_result.percentage}%)
+                                    </span>
+                                  ) : (
+                                    <span className="badge rounded-pill px-2 py-0.5" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-muted)', fontSize: '0.68rem', border: '1px solid var(--border-subtle)' }}>
+                                      Final Node Check
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="small mb-0 mt-0.5" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                                  {stop.exam_result?.passed 
+                                    ? `Score: ${stop.exam_result.score}/${stop.exam_result.total} · Verified mastery on ${new Date(stop.exam_result.verified_at).toLocaleDateString()}`
+                                    : `Comprehensive exam testing all concepts and practical skills learned across ${stop.title}.`}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartExam(stop);
+                              }}
+                              className="btn btn-sm d-inline-flex align-items-center gap-2 rounded-pill px-3.5 py-2"
+                              style={{
+                                backgroundColor: stop.exam_result?.passed ? 'var(--bg-card)' : 'var(--btn-primary-bg)',
+                                color: stop.exam_result?.passed ? 'var(--text-primary)' : 'var(--btn-primary-text)',
+                                border: '1px solid var(--border-subtle)',
+                                fontSize: '0.82rem',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <ShieldCheck size={15} />
+                              <span>{stop.exam_result?.passed ? 'Retake Milestone Exam' : 'Take Milestone Exam in SEB'}</span>
+                            </button>
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -732,6 +1006,164 @@ export default function RoadmapGenerationView() {
           </div>
         </div>
       </div>
+
+      {/* Safe Exam Browser (SEB) Modal Dialog */}
+      {examModalState && (
+        <div 
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center p-3"
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: 1050, backdropFilter: 'blur(4px)' }}
+          onClick={closeExamModal}
+        >
+          <div 
+            className="clean-card p-4 shadow-lg position-relative"
+            style={{ maxWidth: 540, width: '100%', backgroundColor: 'var(--bg-card)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {examModalState.loading ? (
+              <div className="text-center py-4">
+                <Loader2 size={32} className="spin mb-3 mx-auto" style={{ color: 'var(--accent-olive)' }} />
+                <h5 className="fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                  Generating Milestone Exam
+                </h5>
+                <p className="small mb-0" style={{ color: 'var(--text-muted)' }}>
+                  Gemini is assembling 10 calibrated questions covering {examModalState.stop?.title}...
+                </p>
+              </div>
+            ) : examModalState.finishedResult ? (
+              <div className="text-center py-3">
+                <div 
+                  className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                  style={{ 
+                    width: 56, 
+                    height: 56, 
+                    backgroundColor: examModalState.finishedResult.passed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', 
+                    color: examModalState.finishedResult.passed ? '#10b981' : '#ef4444' 
+                  }}
+                >
+                  <Award size={30} />
+                </div>
+                <h4 className="fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                  {examModalState.finishedResult.passed ? 'Milestone Passed! 🎉' : 'Needs Practice'}
+                </h4>
+                <p className="small mb-3" style={{ color: 'var(--text-muted)' }}>
+                  {examModalState.stop?.title}
+                </p>
+                <div 
+                  className="display-5 fw-bold mb-1" 
+                  style={{ color: examModalState.finishedResult.passed ? '#10b981' : '#ef4444' }}
+                >
+                  {examModalState.finishedResult.percentage}%
+                </div>
+                <p className="small mb-4" style={{ color: 'var(--text-secondary)' }}>
+                  Score: <b>{examModalState.finishedResult.score} / {examModalState.finishedResult.total}</b> (Required: ≥ 75%)
+                  <br />
+                  <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                    {examModalState.finishedResult.passed 
+                      ? 'Milestone verified & marked complete in Supabase.' 
+                      : 'You scored below 75%. Please review the milestone topics and retry.'}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={closeExamModal}
+                  className="btn btn-dark w-100 rounded-pill py-2"
+                >
+                  Return to Roadmap
+                </button>
+              </div>
+            ) : examModalState.launched ? (
+              <div className="text-center py-3">
+                <Loader2 size={36} className="spin mb-3 mx-auto text-danger" />
+                <h5 className="fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                  Exam Running in Safe Exam Browser
+                </h5>
+                <p className="small mb-3" style={{ color: 'var(--text-muted)' }}>
+                  Please confirm <b>"Open Safe Exam Browser"</b> if prompted by your system.
+                </p>
+                <div className="p-3 rounded-2 text-start small mb-4" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
+                  • Do not close this browser tab.<br/>
+                  • Once you submit your test inside SEB, the kiosk will close and your score will update automatically here.
+                </div>
+                <div className="d-flex gap-2 justify-content-center">
+                  <a
+                    href={`http://127.0.0.1:5000/api/career/exam/seb-config/${encodeURIComponent(examModalState.examData?.examToken)}.seb`}
+                    className="btn btn-outline-secondary btn-sm"
+                    download="milestone-exam.seb"
+                  >
+                    Download .seb config manually
+                  </a>
+                  <button
+                    type="button"
+                    onClick={closeExamModal}
+                    className="btn btn-light btn-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <ShieldCheck size={20} style={{ color: 'var(--accent-olive)' }} />
+                  <span className="small fw-bold text-uppercase" style={{ color: 'var(--text-muted)', fontSize: '0.72rem', letterSpacing: '0.06em' }}>
+                    Safe Exam Browser Certification
+                  </span>
+                </div>
+                <h4 className="fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                  {examModalState.stop?.title}
+                </h4>
+                <p className="small mb-3" style={{ color: 'var(--text-muted)' }}>
+                  Exam covers: {(examModalState.stop?.skills || []).join(', ') || 'Core concepts'}
+                </p>
+
+                <div className="p-3 rounded-2 small mb-3" style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
+                  <div className="d-flex justify-content-between mb-1">
+                    <span>Questions:</span>
+                    <b style={{ color: 'var(--text-primary)' }}>{examModalState.examData?.questionCount || 10} MCQs</b>
+                  </div>
+                  <div className="d-flex justify-content-between mb-1">
+                    <span>Duration:</span>
+                    <b style={{ color: 'var(--text-primary)' }}>{Math.round((examModalState.examData?.durationSeconds || 750) / 60)} minutes</b>
+                  </div>
+                  <div className="d-flex justify-content-between mb-1">
+                    <span>Passing Threshold:</span>
+                    <b style={{ color: 'var(--text-primary)' }}>75% or higher</b>
+                  </div>
+                  <div className="d-flex justify-content-between">
+                    <span>Proctor Mode:</span>
+                    <b className="text-danger">Kiosk Lockdown (No Alt-Tab)</b>
+                  </div>
+                </div>
+
+                <div className="mb-4 small" style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                  <b>Requirement:</b> Make sure Safe Exam Browser is installed on your machine.
+                  <a href="https://safeexambrowser.org/download_en.html" target="_blank" rel="noreferrer" className="ms-1 text-decoration-none">
+                    Download SEB ↗
+                  </a>
+                </div>
+
+                <div className="d-flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchSeb(examModalState.examData?.examToken, examModalState.stop)}
+                    className="btn btn-primary-theme flex-grow-1 d-flex align-items-center justify-content-center gap-2 py-2"
+                  >
+                    <PlayCircle size={16} />
+                    <span>Start Exam in SEB</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeExamModal}
+                    className="btn btn-outline-secondary py-2"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
