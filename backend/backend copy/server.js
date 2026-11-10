@@ -9,7 +9,7 @@ const careerRoadmap = require('./features/career-roadmap/api/router');
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
-const host = process.env.HOST || '127.0.0.1';
+const host = process.env.HOST || '0.0.0.0';
 const allowedOrigins = new Set((process.env.FRONTEND_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
 // Allow local backend origins (used by Safe Exam Browser kiosk connecting directly to port 5000)
