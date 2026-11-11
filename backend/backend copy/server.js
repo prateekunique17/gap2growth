@@ -18,6 +18,7 @@ allowedOrigins.add(`http://localhost:${port}`);
 allowedOrigins.add(`http://127.0.0.1:${port}`);
 
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 app.use(helmet({
   contentSecurityPolicy: false, // allow loading local scripts for SEB kiosk
 }));
