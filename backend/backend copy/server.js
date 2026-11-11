@@ -6,6 +6,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const careerRoadmap = require('./features/career-roadmap/api/router');
+const { supabase } = require('./features/career-roadmap/storage/supabaseStore');
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -31,6 +32,24 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/api/career/exam-assets', express.static(path.join(__dirname, 'features/career-roadmap/exam')));
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'career-roadmap-backend' }));
 app.use('/api/career', rateLimit({ windowMs: 15 * 60 * 1000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
+
+// Supabase JWT auth middleware — attaches req.user from the Bearer token
+app.use('/api/career', async (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+  const token = authHeader.slice(7);
+  if (!token || !supabase) return next();
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (!error && user) {
+      req.user = { id: user.id, email: user.email };
+    }
+  } catch (err) {
+    console.warn('[auth] Supabase token verification failed:', err.message);
+  }
+  next();
+});
+
 app.use('/api/career', careerRoadmap);
 app.use((error, _req, res, _next) => {
   console.error('[career-roadmap]', error.message);
